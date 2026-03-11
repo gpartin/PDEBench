@@ -162,26 +162,26 @@ class WaveSimulator:
             result = np.zeros((self.Nt, self.Nx, self.Nx), dtype=np.float32)
 
         result[0] = u0.astype(np.float32)
-        save_idx = 1
-        save_interval = max(1, self.n_steps // (self.Nt - 1))
+
+        # Precompute which integration step maps to each t_save entry
+        save_step_to_idx = {}
+        for k in range(1, self.Nt):
+            target_step = int(round(self.t_save[k] / self.dt))
+            target_step = min(target_step, self.n_steps)
+            save_step_to_idx[target_step] = k
 
         c2dt2 = self.c**2 * self.dt**2
         chi2dt2 = self.chi**2 * self.dt**2
 
         for step in range(1, self.n_steps + 1):
+            # Save before advance: u_curr is at time step * dt
+            if step in save_step_to_idx:
+                result[save_step_to_idx[step]] = u_curr.astype(np.float32)
+
             lap = laplacian(u_curr)
             u_next = 2 * u_curr - u_prev + c2dt2 * lap - chi2dt2 * u_curr
             u_prev = u_curr
             u_curr = u_next
-
-            if save_idx < self.Nt and step % save_interval == 0:
-                result[save_idx] = u_curr.astype(np.float32)
-                save_idx += 1
-
-        # Fill remaining if rounding caused fewer saves
-        while save_idx < self.Nt:
-            result[save_idx] = u_curr.astype(np.float32)
-            save_idx += 1
 
         return result
 

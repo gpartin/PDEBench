@@ -6,7 +6,6 @@ defaults:
 
 work_dir: ${hydra:runtime.cwd}
 data_dir: data
-upload: false
 
 # Output filename (without extension)
 output_path: 1D_Wave_c1.0

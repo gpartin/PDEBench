@@ -84,6 +84,13 @@ def simulator(config: DictConfig, seed: int) -> None:
                     dtype="float32",
                     compression="lzf",
                 )
+                if config.sim.ndim == 2:
+                    f.create_dataset(
+                        f"{seed_str}/grid/y",
+                        data=sim.x.astype(np.float32),
+                        dtype="float32",
+                        compression="lzf",
+                    )
                 seed_group = f[seed_str]
                 seed_group.attrs["config"] = OmegaConf.to_yaml(config)
         except OSError:
@@ -109,6 +116,9 @@ def combine_to_tensor_format(
 
         x_coord = np.array(f_in[f"{first_key}/grid/x"])
         t_coord = np.array(f_in[f"{first_key}/grid/t"])
+        y_coord = None
+        if f"{first_key}/grid/y" in f_in:
+            y_coord = np.array(f_in[f"{first_key}/grid/y"])
 
         # Allocate combined tensor
         full_shape = (n_samples, *sample_shape)
@@ -122,11 +132,19 @@ def combine_to_tensor_format(
             )
             for i in range(n_samples):
                 key = str(i).zfill(4)
-                if key in f_in:
-                    tensor[i] = f_in[f"{key}/data"]
+                if key not in f_in:
+                    msg = (
+                        f"Missing seed {key} in {h5_path}; "
+                        f"expected {n_samples} consecutive seeds "
+                        f"0000..{str(n_samples - 1).zfill(4)}"
+                    )
+                    raise KeyError(msg)
+                tensor[i] = f_in[f"{key}/data"]
 
             f_out.create_dataset("x-coordinate", data=x_coord)
             f_out.create_dataset("t-coordinate", data=t_coord)
+            if y_coord is not None:
+                f_out.create_dataset("y-coordinate", data=y_coord)
 
     log.info(f"Combined tensor format saved to {output_path} with shape {full_shape}")
 
