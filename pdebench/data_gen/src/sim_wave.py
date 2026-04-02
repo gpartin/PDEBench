@@ -37,6 +37,7 @@ class WaveSimulator:
     :param xdim: number of spatial grid points per dimension
     :param ndim: spatial dimensionality (1 or 2)
     :param n_modes: number of Fourier modes in IC generation
+    :param n: number of batches (unused; present for API compatibility)
     :param seed: random seed for IC generation
     """
 
@@ -49,6 +50,7 @@ class WaveSimulator:
         xdim: int = 1024,
         ndim: int = 1,
         n_modes: int = 5,
+        n: int = 1,  # noqa: ARG002
         seed: int = 0,
     ):
         self.c = c
@@ -217,5 +219,44 @@ def analytical_solution_1d(
         # du/dt(0) = 0 => only cosine term
         u_hat_t = u0_hat * np.cos(omega * ti)
         result[i] = np.fft.ifft(u_hat_t).real
+
+    return result
+
+
+def analytical_solution_2d(
+    x: np.ndarray,
+    t: np.ndarray,
+    u0: np.ndarray,
+    c: float,
+    chi: float = 0.0,
+) -> np.ndarray:
+    """
+    Compute analytical solution for 2D wave/KG equation via 2D FFT.
+
+    Each Fourier mode (kx, ky) oscillates at frequency
+    omega = sqrt(c^2 * (2*pi)^2 * (kx^2 + ky^2) + chi^2).
+
+    :param x: 1D spatial grid (Nx,), same for both dimensions
+    :param t: time points (Nt,)
+    :param u0: initial condition (Nx, Nx)
+    :param c: wave speed
+    :param chi: mass parameter
+    :return: solution array (Nt, Nx, Nx)
+    """
+    Nx = u0.shape[0]
+    u0_hat = np.fft.fft2(u0)
+    kx = np.fft.fftfreq(Nx, d=1.0 / Nx)
+    ky = np.fft.fftfreq(Nx, d=1.0 / Nx)
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
+
+    omega = np.sqrt(
+        c**2 * (2 * np.pi) ** 2 * (KX**2 + KY**2) + chi**2 + 0j
+    ).real
+
+    result = np.zeros((len(t), Nx, Nx), dtype=np.float64)
+    for i, ti in enumerate(t):
+        # du/dt(0) = 0 => only cosine term
+        u_hat_t = u0_hat * np.cos(omega * ti)
+        result[i] = np.fft.ifft2(u_hat_t).real
 
     return result

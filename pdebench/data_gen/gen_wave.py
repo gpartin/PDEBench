@@ -164,7 +164,7 @@ def main(config: DictConfig):
     base_name = f"{config.sim.ndim}D_Wave_c{config.sim.c}{chi_str}"
     config.output_path = str((output_dir / base_name).with_suffix(".h5"))
 
-    num_samples = 1000
+    num_samples = config.num_samples
 
     log.info(f"Generating {num_samples} samples -> {config.output_path}")
     log.info(f"PDE: d2u/dt2 = {config.sim.c}^2 * Lap(u) - {config.sim.chi}^2 * u")

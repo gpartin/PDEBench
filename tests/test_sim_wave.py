@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pdebench.data_gen.src.sim_wave import WaveSimulator, analytical_solution_1d
+from pdebench.data_gen.src.sim_wave import WaveSimulator, analytical_solution_1d, analytical_solution_2d
 
 
 # ---------------------------------------------------------------------------
@@ -141,3 +141,85 @@ def test_analytical_solution_kg_at_t0():
     result = analytical_solution_1d(x, t, u0, c=1.0, chi=5.0)
 
     np.testing.assert_allclose(result[0], u0, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Seed reproducibility
+# ---------------------------------------------------------------------------
+
+
+def test_seed_reproducibility():
+    """Same seed must produce bit-identical output across two calls."""
+    sim_a = WaveSimulator(c=1.0, chi=0.0, xdim=32, tdim=11, t=0.5, seed=42)
+    sim_b = WaveSimulator(c=1.0, chi=0.0, xdim=32, tdim=11, t=0.5, seed=42)
+    np.testing.assert_array_equal(sim_a.generate_sample(), sim_b.generate_sample())
+
+
+# ---------------------------------------------------------------------------
+# 2D analytical solution
+# ---------------------------------------------------------------------------
+
+
+def test_wave_2d_matches_analytical():
+    """
+    2D leapfrog should match the 2D analytical solution to within 1% nRMSE.
+
+    IC: u0(x, y) = cos(2*pi*x) * cos(2*pi*y), du/dt=0.
+    Exact: u(x, y, t) = cos(2*pi*x) * cos(2*pi*y) * cos(2*pi*sqrt(2)*c*t).
+    """
+    Nx = 64
+    sim = WaveSimulator(c=1.0, chi=0.0, xdim=Nx, tdim=11, t=0.3, ndim=2, seed=0)
+
+    x1d = np.linspace(0, 1, Nx, endpoint=False)
+    X, Y = np.meshgrid(x1d, x1d, indexing="ij")
+    u0_2d = np.cos(2 * np.pi * X) * np.cos(2 * np.pi * Y)
+
+    sim._random_fourier_ic_2d = lambda rng: u0_2d.copy()  # noqa: ARG005
+
+    numerical = sim.generate_sample()  # (11, Nx, Nx) float32
+    exact = analytical_solution_2d(x1d, sim.t_save, u0_2d, c=1.0, chi=0.0)
+
+    u_range = exact.max() - exact.min()
+    nrmse = np.sqrt(np.mean((numerical.astype(np.float64) - exact) ** 2)) / u_range
+    assert nrmse < 0.01, f"2D nRMSE={nrmse:.4f} exceeds 1% tolerance"
+
+
+def test_analytical_solution_2d_at_t0():
+    """2D analytical solution at t=0 must equal u0 exactly."""
+    Nx = 32
+    x = np.linspace(0, 1, Nx, endpoint=False)
+    X, Y = np.meshgrid(x, x, indexing="ij")
+    u0 = np.sin(2 * np.pi * X) + 0.3 * np.cos(4 * np.pi * Y)
+    t = np.array([0.0, 0.5, 1.0])
+
+    result = analytical_solution_2d(x, t, u0, c=1.0, chi=0.0)
+
+    np.testing.assert_allclose(result[0], u0, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Periodicity: single mode returns to IC after one period
+# ---------------------------------------------------------------------------
+
+
+def test_wave_periodicity_single_mode():
+    """
+    After one full period T = 1/c, a single k=1 cosine IC returns to itself.
+
+    u(x, t) = cos(2*pi*x) * cos(2*pi*c*t) has period T = 1/c.
+    The leapfrog nRMSE at t=T should be < 0.1% (O(dt^2) per step).
+    """
+    c = 1.0
+    Nx = 256
+    # tdim=3 saves t=0, t=T/2, t=T
+    sim = WaveSimulator(c=c, chi=0.0, xdim=Nx, tdim=3, t=1.0 / c, seed=0)
+    u0 = np.cos(2 * np.pi * sim.x)
+
+    sim._random_fourier_ic_1d = lambda rng: u0.copy()  # noqa: ARG005
+
+    result = sim.generate_sample()  # (3, Nx): t=0, t=T/2, t=T
+    u_final = result[-1].astype(np.float64)
+
+    u_range = u0.max() - u0.min()
+    nrmse = np.sqrt(np.mean((u_final - u0) ** 2)) / u_range
+    assert nrmse < 0.001, f"Periodicity nRMSE={nrmse:.6f} exceeds 0.1%"
