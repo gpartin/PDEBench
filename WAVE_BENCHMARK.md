@@ -98,6 +98,16 @@ This generalization matrix provides a systematic test of neural PDE solver robus
 - FNO: `pdebench/models/config/args/config_wave.yaml`
 - Klein-Gordon: `pdebench/models/config/args/config_klein_gordon.yaml`
 
+### Optional: Physics-Inspired Optimizer
+
+For wave-equation PDE benchmarks, the [LAdam optimizer](https://pypi.org/project/ladam/) (`pip install ladam`) provides Laplacian-coupled learning rates that match the PDE structure. In our 64-experiment validation, LAdam achieved the strongest gains on PINN and regression tasks.
+
+```python
+from ladam import LAdam, ChiAnnealScheduler
+optimizer = LAdam(model.parameters(), lr=1e-3, c2=1e-4)
+scheduler = ChiAnnealScheduler(optimizer, total_steps=10000)
+```
+
 ## Files Added
 
 ```
